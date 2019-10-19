@@ -5,6 +5,8 @@ statistical information and display
 Ref: https://github.com/pytorch/examples/blob/master/imagenet/main.py
 '''
 
+import torch
+
 def accuracy(output, target, topk=(1,)):
     '''
     Computes the accuracy over the k top predictions for the specified values of k
@@ -45,7 +47,8 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
     def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
+        # fmtstr = '{name}:{val' + self.fmt + '}(avg:{avg' + self.fmt + '})'
+        fmtstr = 'Avg {name}:{avg' + self.fmt + '}'
         return fmtstr.format(**self.__dict__)
 
 class ProgressMeter(object):
@@ -57,7 +60,7 @@ class ProgressMeter(object):
     def display(self, batch):
         entries = [self.prefix + self.batch_fmtstr.format(batch)]
         entries += [str(meter) for meter in self.meters]
-        print('\t'.join(entries))
+        print('    '.join(entries))
 
     def _get_batch_fmtstr(self, num_batches):
         num_digits = len(str(num_batches // 1))

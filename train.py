@@ -20,6 +20,7 @@ from statistics import *
 from EMA import EMA
 from LabelSmoothing import LabelSmoothingLoss
 from DataLoader import dataloaders
+from ResultWriter import ResultWriter
 
 def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gpu):
     '''
@@ -28,6 +29,16 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
 
     # exponential moving average (using in val)
     ema = EMA(model, decay=args.ema_decay)
+    ema.register()
+
+    # save result every epoch
+    train_file_name = 'train.csv'
+    val_file_name = 'val.csv'
+    resultTrainWriter = ResultWriter(args.save_path, train_file_name)
+    resultValWriter = ResultWriter(args.save_path, val_file_name)
+    if args.start_epoch == 0:
+        resultTrainWriter.create_csv(['epoch', 'loss', 'top-1', 'top-5'])
+        resultValWriter.create_csv(['epoch', 'loss', 'top-1', 'top-5'])
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
@@ -42,7 +53,7 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
         top1 = AverageMeter('Acc@1', ':6.2f')
         top5 = AverageMeter('Acc@5', ':6.2f')
         progress = ProgressMeter(
-            len(dataloader),
+            len(dataloader['train']),
             [batch_time, data_time, losses, top1, top5],
             prefix="Epoch: [{}]".format(epoch))
 
@@ -57,9 +68,6 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
                 model.eval()
                 # apply EMA at validation stage
                 ema.apply_shadow()
-
-            running_loss = 0.0
-            running_corrects = 0
 
             end = time.time()
 
@@ -78,7 +86,7 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
                 # track history if only in train
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
-                    _, preds = torch.max(outputs, 1)
+                    # _, preds = torch.max(outputs, 1)
                     loss = criterion(outputs, labels)
 
                     # measure accuracy and record loss
@@ -93,41 +101,23 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
                         optimizer.step()
                 
                 batch_time.update(time.time() - end)
-                time = time.time()
+                end = time.time()
 
-                if phase == 'train' and (i + 1) % args.print_freq == 0:
+                if phase == 'train' and i % args.print_freq == 0:
                     progress.display(i)
             
             if phase == 'train':
                 # EMA update after training
                 ema.update()
+                # write training result to file
+                resultTrainWriter.write_csv([epoch, losses.avg, top1.avg.item(), top5.avg.item()])
             else:
                 # restore the origin parameters after val
                 ema.restore()
+                # write val result to file
+                resultValWriter.write_csv([epoch, losses.avg, top1.avg.item(), top5.avg.item()])
             
-            print(phase + ' * Loss {losses.avg:.2e} Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'.format(losses=losses, top1=top1, top5=top5))
-                # statistics
-                '''
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
-
-                batch_loss = running_loss / ((i + 1) * args.batch_size)
-                batch_acc = running_corrects.double() / ((i + 1) * args.batch_size)
-
-                if phase == 'train' and (i + 1) % args.print_freq == 0:
-                    print('[Epoch {}/{}]-[batch:{}/{}] lr:{:.4f} {} Loss: {:.6f}  Acc: {:.4f}  Time: {:.4f} sec/batch'.format(
-                          epoch + 1, num_epochs, i + 1, round(dataset_sizes[phase]/args.batch_size), scheduler.get_lr()[0], phase, batch_loss, batch_acc, (time.time()-tic_batch)/args.print_freq))
-                    tic_batch = time.time()
-                '''
-
-            '''
-            epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_acc = running_corrects.double() / dataset_sizes[phase]
-
-            print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
-            with open(os.path.join(args.save_path, 'result.txt'), 'a') as f:
-                f.write('Epoch:{}/{} {} Loss: {:.4f} Acc: {:.4f} \n'.format(epoch + 1, num_epochs, phase, epoch_loss, epoch_acc))
-            '''
+            print(phase.center(5) + ' ***    Loss:{losses.avg:.2e}    Acc@1:{top1.avg:.2f}    Acc@5:{top5.avg:.2f}'.format(losses=losses, top1=top1, top5=top5))
 
         if epoch % args.save_epoch_freq == 0:
             if not os.path.exists(args.save_path):
@@ -135,8 +125,8 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
             torch.save(model.state_dict(), os.path.join(args.save_path, "epoch_" + str(epoch) + ".pth"))
         
         # deep copy the model
-        if phase == 'val' and epoch_acc > best_acc:
-            best_acc = epoch_acc
+        if phase == 'val' and top1.avg.item() > best_acc:
+            best_acc = top1.avg.item()
             best_model_wts = copy.deepcopy(model.state_dict())
 
     print('Best val Accuracy: {:4f}'.format(best_acc))
@@ -154,29 +144,50 @@ if __name__ == '__main__':
     # Root catalog of images
     parser.add_argument('--data-dir', type=str, default='/media/data2/chenjiarong/ImageData')
     parser.add_argument('--batch-size', type=int, default=256)
-    parser.add_argument('--num-class', type=int, default=1000)
     parser.add_argument('--num-epochs', type=int, default=150)
     parser.add_argument('--lr', type=float, default=0.1)
     parser.add_argument('--num-workers', type=int, default=4)
     #parser.add_argument('--gpus', type=str, default='0')
     parser.add_argument('--print-freq', type=int, default=1000)
     parser.add_argument('--save-epoch-freq', type=int, default=1)
-    parser.add_argument('--save-path', type=str, default='/media/data2/chenjiarong/MobileNetV3/model')
+    parser.add_argument('--save-path', type=str, default='/media/data2/chenjiarong/saved-model')
     parser.add_argument('--resume', type=str, default='', help='For training from one checkpoint')
     parser.add_argument('--start-epoch', type=int, default=0, help='Corresponding to the epoch of resume')
     parser.add_argument('--ema-decay', type=float, default=0.9999, help='The decay of exponential moving average ')
     parser.add_argument('--dataset', type=str, default='ImageNet', help='The dataset to be trained')
+    parser.add_argument('--mode', type=str, default='large', help='large or small MobileNetV3')
+    # parser.add_argument('--num-class', type=int, default=1000)
+    parser.add_argument('--width-multiplier', type=float, default=1.0, help='width multiplier')
+    parser.add_argument('--dropout', type=float, default=0.2, help='dropout rate')
     args = parser.parse_args()
+
+    # folder to save what we need in this type: MobileNetV3-mode-dataset-width_multiplier-dropout-lr-batch_size-ema_decay
+    folder_name = ['MobileNetV3', args.mode, args.dataset, str(args.width_multiplier), str(args.dropout), str(args.lr), str(args.batch_size), str(args.ema_decay)]
+    folder_name = '-'.join(folder_name)
+    args.save_path = os.path.join(args.save_path, folder_name)
+    if not os.path.exists(args.save_path):
+        os.makedirs(args.save_path)
 
     # read data
     dataloaders = dataloaders(args)
 
+    # different input size and number of classes for different datasets
+    # (default: ImageNet)
+    input_size = 224
+    num_class = 1000
+    if args.dataset.lower() == 'cifar10':
+        input_size = 32
+        num_class = 10
+    elif args.dataset.lower() == 'cifar100':
+        input_size = 32
+        num_class = 100
+        
     # use gpu or not
     use_gpu = torch.cuda.is_available()
     print("use_gpu:{}".format(use_gpu))
 
     # get model
-    model = MobileNetV3(mode='small', classes_num=args.num_class)
+    model = MobileNetV3(mode=args.mode, classes_num=num_class, input_size=input_size, width_multiplier=args.width_multiplier, dropout=args.dropout)
 
     if use_gpu:
         model = torch.nn.DataParallel(model)
@@ -195,7 +206,7 @@ if __name__ == '__main__':
     # criterion = nn.CrossEntropyLoss()
     
     # using Label Smoothing
-    criterion = LabelSmoothingLoss(args.classes_num, label_smoothing=0.1)
+    criterion = LabelSmoothingLoss(num_class, label_smoothing=0.1)
 
     # optimizer_ft = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.00004)
     optimizer_ft = optim.RMSprop(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-5)
@@ -205,7 +216,7 @@ if __name__ == '__main__':
 
     model = train_model(args=args,
                         model=model,
-                        dataloader=dataloaders
+                        dataloader=dataloaders,
                         criterion=criterion,
                         optimizer=optimizer_ft,
                         scheduler=exp_lr_scheduler,

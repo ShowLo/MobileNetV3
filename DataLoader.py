@@ -29,7 +29,7 @@ def Cifar10DataLoader(args):
     image_datasets['val'] = datasets.CIFAR10(root=args.data_dir, train=False, download=True, transform=data_transforms['val'])
 
     dataloders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=args.batch_size, shuffle=True if x == 'train' else False,
-                    num_workers=args.num_workers) for x in ['train', 'val']}
+                    num_workers=args.num_workers, pin_memory=True) for x in ['train', 'val']}
     
     return dataloders
 
@@ -52,7 +52,7 @@ def Cifar100DataLoader(args):
     image_datasets['val'] = datasets.CIFAR100(root=args.data_dir, train=False, download=True, transform=data_transforms['val'])
 
     dataloders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=args.batch_size, shuffle=True if x == 'train' else False,
-                    num_workers=args.num_workers) for x in ['train', 'val']}
+                    num_workers=args.num_workers, pin_memory=True) for x in ['train', 'val']}
     
     return dataloders
 
@@ -73,11 +73,11 @@ def ImageNetDataLoader(args):
         ]),
     }
     image_datasets = {}
-    image_datasets['train'] = datasets.ImageNet(root=args.data_dir, split='train', download=False, transform=data_transforms['train'])
-    image_datasets['val'] = datasets.ImageNet(root=args.data_dir, split='val', download=False, transform=data_transforms['val'])
+    image_datasets['train'] = datasets.ImageFolder(root=os.path.join(args.data_dir, 'ILSVRC2012_img_train'), transform=data_transforms['train'])
+    image_datasets['val'] = datasets.ImageFolder(root=os.path.join(args.data_dir, 'ILSVRC2012_img_val'), transform=data_transforms['val'])
     
     dataloders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=args.batch_size, shuffle=True if x == 'train' else False,
-                    num_workers=args.num_workers) for x in ['train', 'val']}
+                    num_workers=args.num_workers, pin_memory=True) for x in ['train', 'val']}
 
     return dataloders
 
