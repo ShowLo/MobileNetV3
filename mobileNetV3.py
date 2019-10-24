@@ -187,7 +187,12 @@ class MobileNetV3(nn.Module):
             ]
 
         first_channels_num = 16
-        last_channels_num = 1280
+
+        # last_channels_num = 1280
+        # according to https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet_v3.py
+        # if small -- 1024, if large -- 1280
+        last_channels_num = 1280 if mode == 'large' else 1024
+
         divisor = 8
 
         ########################################################################################################################
@@ -217,8 +222,11 @@ class MobileNetV3(nn.Module):
                 H_swish()
             )
         feature_extraction_layers.append(last_stage_layer1)
+
         # SE Module
-        feature_extraction_layers.append(SEModule(last_stage_channels_num) if mode == 'small' else nn.Sequential())
+        # remove the last SE Module according to https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet_v3.py
+        # feature_extraction_layers.append(SEModule(last_stage_channels_num) if mode == 'small' else nn.Sequential())
+
         feature_extraction_layers.append(nn.AdaptiveAvgPool2d(1))
         feature_extraction_layers.append(nn.Conv2d(in_channels=last_stage_channels_num, out_channels=last_channels_num, kernel_size=1, stride=1, padding=0, bias=False))
         feature_extraction_layers.append(H_swish())
@@ -264,6 +272,7 @@ if __name__ == "__main__":
     model_large.eval()
     model_small = MobileNetV3(mode='small')
     model_small.eval()
+    '''
     input = torch.randn(1, 3, 224, 224)
     from thop import profile
     FLOPs_large, params_large = profile(model_large, inputs=(input,))
@@ -277,3 +286,10 @@ if __name__ == "__main__":
     print('MobileNetV3-Small:')
     print('Total flops: %.2fM' % (FLOPs_small/1000000.0))
     print('Total params: %.2fM' % (params_small/1000000.0))
+    '''
+
+    from torchsummaryX import summary
+    summary(model_large, torch.zeros((1, 3, 224, 224)))
+    summary(model_small, torch.zeros((1, 3, 224, 224)))
+    summary(model_large, torch.zeros((1, 3, 32, 32)))
+    summary(model_small, torch.zeros((1, 3, 32, 32)))
