@@ -30,19 +30,21 @@ CUDA_VISIBLE_DEVICES=3 python train.py --batch-size 256 --resume /MobileNetV3/ou
 
 # Experiments
 
-## Training setting on ImageNet:
+## Training setting
+
+### on ImageNet
 
 &emsp;TO DO.
 
-## Training setting on CIFAR-10:
+### on CIFAR-10
 
 1. number of epochs: 150 for MobileNetV3-Small and 200 for MobileNetV3-Large
 2. learning rate schedule: cosine, minium lr of 1e-5, initial lr=0.7
 3. weight decay: 4e-5
-5. batch size: 256
-6. optimizer: SGD with momentum=0.9
+4. batch size: 256
+5. optimizer: SGD with momentum=0.9
 
-## Training setting on CIFAR-100:
+### on CIFAR-100
 
 &emsp;TO DO.
 
