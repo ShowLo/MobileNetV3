@@ -15,17 +15,20 @@ import os
 from mobileNetV3 import MobileNetV3
 import argparse
 import copy
+from math import cos, pi
 
 from statistics import *
 from EMA import EMA
 from LabelSmoothing import LabelSmoothingLoss
 from DataLoader import dataloaders
 from ResultWriter import ResultWriter
+from CosineWarmupLR import CosineWarmupLR
 
 def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gpu):
     '''
     train the model
     '''
+    since = time.time()
 
     # exponential moving average (using in val)
     ema = EMA(model, decay=args.ema_decay)
@@ -42,32 +45,34 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+    correspond_top5 = 0.0
 
     device = torch.device('cuda' if use_gpu else 'cpu')
 
     for epoch in range(args.start_epoch, args.num_epochs):
-        # statistical information
-        batch_time = AverageMeter('Time', ':6.3f')
-        data_time = AverageMeter('Data', ':6.3f')
-        losses = AverageMeter('Loss', ':.4e')
-        top1 = AverageMeter('Acc@1', ':6.2f')
-        top5 = AverageMeter('Acc@5', ':6.2f')
-        progress = ProgressMeter(
-            len(dataloader['train']),
-            [batch_time, data_time, losses, top1, top5],
-            prefix="Epoch: [{}]".format(epoch))
 
         # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
+            # statistical information
+            batch_time = AverageMeter('Time', ':6.3f')
+            data_time = AverageMeter('Data', ':6.3f')
+            losses = AverageMeter('Loss', ':.4e')
+            top1 = AverageMeter('Acc@1', ':6.2f')
+            top5 = AverageMeter('Acc@5', ':6.2f')
+            progress = ProgressMeter(
+                len(dataloader[phase]),
+                [batch_time, data_time, losses, top1, top5],
+                prefix="Epoch: [{}]".format(epoch))
             if phase == 'train':
-                scheduler.step(epoch)
+                if args.lr_decay == 'step':
+                    scheduler.step(epoch)
                 # Set model to training mode
                 model.train()
             else:
-                # Set model to evaluate mode
-                model.eval()
                 # apply EMA at validation stage
                 ema.apply_shadow()
+                # Set model to evaluate mode
+                model.eval()
 
             end = time.time()
 
@@ -85,7 +90,10 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
                 # forward
                 # track history if only in train
                 with torch.set_grad_enabled(phase == 'train'):
+                    
                     outputs = model(inputs)
+                    #if phase == 'val': 
+                    #    print(outputs)
                     # _, preds = torch.max(outputs, 1)
                     loss = criterion(outputs, labels)
 
@@ -98,7 +106,12 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
                     # backward + optimize only if in training phase
                     if phase == 'train':
                         loss.backward()
+                        if args.lr_decay == 'cos':
+                            # update lr here if using cosine lr decay
+                            scheduler.step(epoch * len(dataloader[phase]) + i)
                         optimizer.step()
+                        # EMA update after training(every iteration)
+                        ema.update()
                 
                 batch_time.update(time.time() - end)
                 end = time.time()
@@ -108,7 +121,7 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
             
             if phase == 'train':
                 # EMA update after training
-                ema.update()
+                # ema.update()
                 # write training result to file
                 resultTrainWriter.write_csv([epoch, losses.avg, top1.avg.item(), top5.avg.item()])
             else:
@@ -117,19 +130,33 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
                 # write val result to file
                 resultValWriter.write_csv([epoch, losses.avg, top1.avg.item(), top5.avg.item()])
             
+            if phase == 'train':
+                print()
+                # there is a bug in get_lr() if using pytorch 1.1.0, see https://github.com/pytorch/pytorch/issues/22107
+                # so here we don't use get_lr()
+                # print('lr:%.6f' % scheduler.get_lr()[0])
+                print('lr:%.6f' % scheduler.optimizer.param_groups[0]['lr'])
             print(phase.center(5) + ' ***    Loss:{losses.avg:.2e}    Acc@1:{top1.avg:.2f}    Acc@5:{top5.avg:.2f}'.format(losses=losses, top1=top1, top5=top5))
+            if phase == 'val':
+                print()
 
         if epoch % args.save_epoch_freq == 0:
             if not os.path.exists(args.save_path):
                 os.makedirs(args.save_path)
             torch.save(model.state_dict(), os.path.join(args.save_path, "epoch_" + str(epoch) + ".pth"))
-        
+
         # deep copy the model
         if phase == 'val' and top1.avg.item() > best_acc:
             best_acc = top1.avg.item()
+            correspond_top5 = top5.avg.item()
             best_model_wts = copy.deepcopy(model.state_dict())
 
-    print('Best val Accuracy: {:4f}'.format(best_acc))
+    print(args.save_path)
+    print('Best val top-1 Accuracy: {:4f}'.format(best_acc))
+    print('Corresponding top-5 Accuracy: {:4f}'.format(correspond_top5))
+    
+    time_elapsed = time.time() - since
+    print('Training complete in{:.0f}h {:.0f}m {:.0f}s'.format(time_elapsed//3600, // 60, time_elapsed % 60))
 
     # load best model weights
     model.load_state_dict(best_model_wts)
@@ -159,10 +186,20 @@ if __name__ == '__main__':
     # parser.add_argument('--num-class', type=int, default=1000)
     parser.add_argument('--width-multiplier', type=float, default=1.0, help='width multiplier')
     parser.add_argument('--dropout', type=float, default=0.2, help='dropout rate')
+    parser.add_argument('--label-smoothing', type=float, default=0.1, help='label smoothing')
+    parser.add_argument('--lr-decay', type=str, default='step', help='learning rate decay method, step or cos')
+    parser.add_argument('--step-size', type=int, default=3, help='step size in stepLR()')
+    parser.add_argument('--gamma', type=float, default=0.99, help='gamma in stepLR()')
+    parser.add_argument('--lr-min', type=float, default=0, help='minium lr using in CosineWarmupLR')
+    parser.add_argument('--warmup-epochs', type=int, default=0, help='warmup epochs using in CosineWarmupLR')
     args = parser.parse_args()
 
-    # folder to save what we need in this type: MobileNetV3-mode-dataset-width_multiplier-dropout-lr-batch_size-ema_decay
-    folder_name = ['MobileNetV3', args.mode, args.dataset, str(args.width_multiplier), str(args.dropout), str(args.lr), str(args.batch_size), str(args.ema_decay)]
+    # folder to save what we need in this type: MobileNetV3-mode-dataset-width_multiplier-dropout-lr-batch_size-ema_decay-label_smoothing
+    folder_name = ['MobileNetV3', args.mode, args.dataset, 'wm'+str(args.width_multiplier), 'dp'+str(args.dropout), 'lr'+str(args.lr), 'bs'+str(args.batch_size), 'ed'+str(args.ema_decay), 'ls'+str(args.label_smoothing)]
+    if args.lr_decay == 'step':
+        folder_name.append(args.lr_decay+str(args.step_size)+'&'+str(args.gamma))
+    elif args.lr_decay == 'cos':
+        folder_name.append(args.lr_decay+str(args.warmup_epochs) + '&' + str(args.lr_min))
     folder_name = '-'.join(folder_name)
     args.save_path = os.path.join(args.save_path, folder_name)
     if not os.path.exists(args.save_path):
@@ -172,15 +209,15 @@ if __name__ == '__main__':
     dataloaders = dataloaders(args)
 
     # different input size and number of classes for different datasets
-    # (default: ImageNet)
-    input_size = 224
-    num_class = 1000
-    if args.dataset.lower() == 'cifar10':
-        input_size = 32
-        num_class = 10
-    elif args.dataset.lower() == 'cifar100':
+    if args.dataset.lower() == 'imagenet':
+        input_size = 224
+        num_class = 1000
+    if args.dataset.lower() == 'cifar100':
         input_size = 32
         num_class = 100
+    elif args.dataset.lower() == 'cifar10':
+        input_size = 32
+        num_class = 10
         
     # use gpu or not
     use_gpu = torch.cuda.is_available()
@@ -190,7 +227,8 @@ if __name__ == '__main__':
     model = MobileNetV3(mode=args.mode, classes_num=num_class, input_size=input_size, width_multiplier=args.width_multiplier, dropout=args.dropout)
 
     if use_gpu:
-        model = torch.nn.DataParallel(model)
+        if torch.cuda.device_count() > 1:
+            model = torch.nn.DataParallel(model)
         model.to(torch.device('cuda'))
     else:
         model.to(torch.device('cpu'))
@@ -202,23 +240,27 @@ if __name__ == '__main__':
         else:
             print(("=> no checkpoint found at '{}'".format(args.resume)))
 
-    # define loss function
-    # criterion = nn.CrossEntropyLoss()
+    if args.label_smoothing > 0:
+        # using Label Smoothing
+        criterion = LabelSmoothingLoss(num_class, label_smoothing=args.label_smoothing)
+    else:
+        criterion = nn.CrossEntropyLoss()
     
-    # using Label Smoothing
-    criterion = LabelSmoothingLoss(num_class, label_smoothing=0.1)
 
-    # optimizer_ft = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.00004)
-    optimizer_ft = optim.RMSprop(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-5)
+    optimizer_ft = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=0.00004)
+    #optimizer_ft = optim.RMSprop(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=1e-5)
 
-    # Decay LR by a factor of 0.99 every 3 epoch
-    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=3, gamma=0.99)
+    if args.lr_decay == 'step':
+        # Decay LR by a factor of 0.99 every 3 epoch
+        lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=args.step_size, gamma=args.gamma)
+    else:
+        lr_scheduler = CosineWarmupLR(optimizer=optimizer_ft,epochs=args.num_epochs, iter_in_one_epoch=len(dataloaders['train']), lr_min=args.lr_min, warmup_epochs=args.warmup_epochs)
 
     model = train_model(args=args,
                         model=model,
                         dataloader=dataloaders,
                         criterion=criterion,
                         optimizer=optimizer_ft,
-                        scheduler=exp_lr_scheduler,
+                        scheduler=lr_scheduler,
                         use_gpu=use_gpu)
     torch.save(model.state_dict(), os.path.join(args.save_path, 'best_model_wts.pth'))
