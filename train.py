@@ -156,7 +156,7 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
     print('Corresponding top-5 Accuracy: {:4f}'.format(correspond_top5))
     
     time_elapsed = time.time() - since
-    print('Training complete in{:.0f}h {:.0f}m {:.0f}s'.format(time_elapsed//3600, // 60, time_elapsed % 60))
+    print('Training complete in{:.0f}h {:.0f}m {:.0f}s'.format(time_elapsed // 3600, time_elapsed // 60, time_elapsed % 60))
 
     # load best model weights
     model.load_state_dict(best_model_wts)
