@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 
 '''
-Image dataset loader, including ImageNet, cifar10 and cifar100
+Image dataset loader
 '''
 
 from torchvision import transforms, datasets
@@ -81,12 +81,60 @@ def ImageNetDataLoader(args):
 
     return dataloders
 
+def TinyImageNetDataLoader(args):
+    # data transform
+    data_transforms = {
+        'train': transforms.Compose([
+            transforms.RandomResizedCrop(56),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ]),
+        'val': transforms.Compose([
+            transforms.CenterCrop(56),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ]),
+    }
+    image_datasets = {}
+    image_datasets['train'] = datasets.ImageFolder(root=os.path.join(args.data_dir, 'train'), transform=data_transforms['train'])
+    image_datasets['val'] = datasets.ImageFolder(root=os.path.join(args.data_dir, 'val'), transform=data_transforms['val'])
+    
+    dataloders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=args.batch_size, shuffle=True if x == 'train' else False,
+                    num_workers=args.num_workers, pin_memory=True) for x in ['train', 'val']}
+
+    return dataloders
+
+def SVHNDataLoader(args):
+    from SVHN import SVHN
+    data_transforms = {
+        'train': transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4309, 0.4302, 0.4463), (0.1965, 0.1983, 0.1994))
+        ]),
+        'val': transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4524, 0.4525, 0.4690), (0.2194, 0.2266, 0.2285))
+        ])
+    }
+
+    image_datasets = {}
+    image_datasets['train'] = SVHN(root=os.path.join(args.data_dir, 'SVHN'), split='train', download=False, transform=data_transforms['train'])
+    image_datasets['val'] = SVHN(root=os.path.join(args.data_dir, 'SVHN'), split='test', download=False, transform=data_transforms['val'])
+
+    dataloders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=args.batch_size, shuffle=True if x == 'train' else False,
+                    num_workers=args.num_workers, pin_memory=True) for x in ['train', 'val']}
+    
+    return dataloders
+
 def dataloaders(args):
     dataset = args.dataset.lower()
-    assert dataset in ['imagenet', 'cifar10', 'cifar100']
+    assert dataset in ['imagenet', 'tinyimagenet', 'cifar10', 'cifar100', 'svhn']
     if dataset == 'imagenet':
         return ImageNetDataLoader(args)
     elif dataset == 'cifar10':
         return Cifar10DataLoader(args)
     elif dataset == 'cifar100':
         return Cifar100DataLoader(args)
+    elif dataset == 'svhn':
+        return SVHNDataLoader(args)

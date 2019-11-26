@@ -8,6 +8,7 @@ An implementation of MobileNetV3 with pyTorch
 
 * CIFAR-10
 * CIFAR-100
+* SVHN
 * ImageNet: Please move validation images to labeled subfolders, you can use the script [here](https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh).
 
 # Train
@@ -15,13 +16,27 @@ An implementation of MobileNetV3 with pyTorch
 * Train from scratch:
 
 ```
-CUDA_VISIBLE_DEVICES=0 python train.py --batch-size 256
+CUDA_VISIBLE_DEVICES=3 python train.py --batch-size=128 --mode=small \
+--print-freq=100 --dataset=CIFAR100 --ema-decay=0 --label-smoothing=0.1 \
+--lr=0.3 --save-epoch-freq=1000 --lr-decay=cos --lr-min=0 \
+--warmup-epochs=5 --weight-decay=6e-5 --num-epochs=200 --width-multiplier=1 \
+-nbd -zero-gamma -mixup
 ```
 
-* Train from one checkpoint(for example, train from `epoch_33.pth`, the `--start-epoch` parameter is corresponding to the epoch of the checkpoint):
+where 
 
 ```
-CUDA_VISIBLE_DEVICES=3 python train.py --batch-size 256 --resume /MobileNetV3/output/epoch_33.pth --start-epoch 33 --num-epochs 100
+mode: using MobileNetV3-Small(if set to small) or MobileNetV3-Large(if set to large).
+dataset: which dataset to use(CIFAR10, CIFAR100, SVHN, TinyImageNet or ImageNet).
+ema-decay: decay of EMA, if set to 0, do not use EMA.
+label-smoothing: $epsilon$ using in label smoothing, if set to 0, do not use label smoothing.
+lr-decay: learning rate decay schedule, step or cos.
+lr-min: min lr in cos lr decay.
+warmup-epochs: warmup epochs using in cos lr deacy.
+num-epochs: total training epochs.
+nbd: no bias decay.
+zero-gamma: zero $gamma$ of last BN in each block.
+mixup: using Mixup.
 ```
 
 # Pretrained models
