@@ -9,6 +9,7 @@ An implementation of MobileNetV3 with pyTorch
 * CIFAR-10
 * CIFAR-100
 * SVHN
+* Tiny-ImageNet
 * ImageNet: Please move validation images to labeled subfolders, you can use the script [here](https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh).
 
 # Train
@@ -23,9 +24,10 @@ CUDA_VISIBLE_DEVICES=3 python train.py --batch-size=128 --mode=small \
 -nbd -zero-gamma -mixup
 ```
 
-where 
+where the meaning of the parameters are as followed:
 
 ```
+batch-size
 mode: using MobileNetV3-Small(if set to small) or MobileNetV3-Large(if set to large).
 dataset: which dataset to use(CIFAR10, CIFAR100, SVHN, TinyImageNet or ImageNet).
 ema-decay: decay of EMA, if set to 0, do not use EMA.
