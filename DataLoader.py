@@ -132,6 +132,8 @@ def dataloaders(args):
     assert dataset in ['imagenet', 'tinyimagenet', 'cifar10', 'cifar100', 'svhn']
     if dataset == 'imagenet':
         return ImageNetDataLoader(args)
+    elif dataset == 'tinyimagenet':
+        return TinyImageNetDataLoader(args)
     elif dataset == 'cifar10':
         return Cifar10DataLoader(args)
     elif dataset == 'cifar100':
