@@ -103,8 +103,8 @@ class TinyImageNetHybridValPipe(Pipeline):
         return [output, self.labels]
 
 class ImageNetHybridTrainPipe(Pipeline):
-    def __init__(self, batch_size, num_threads, device_id, data_dir, crop, dali_cpu=False):
-        super(ImageNetHybridTrainPipe, self).__init__(batch_size, num_threads, device_id, seed = 12 + device_id)
+    def __init__(self, batch_size, num_threads, device_id, data_dir, crop, seed, dali_cpu=False):
+        super(ImageNetHybridTrainPipe, self).__init__(batch_size, num_threads, device_id, seed = seed)
     
         if torch.distributed.is_initialized():
             local_rank = torch.distributed.get_rank()
@@ -153,8 +153,8 @@ class ImageNetHybridTrainPipe(Pipeline):
 
 
 class ImageNetHybridValPipe(Pipeline):
-    def __init__(self, batch_size, num_threads, device_id, data_dir, crop, size):
-        super(ImageNetHybridValPipe, self).__init__(batch_size, num_threads, device_id, seed = 12 + device_id)
+    def __init__(self, batch_size, num_threads, device_id, data_dir, crop, size, seed):
+        super(ImageNetHybridValPipe, self).__init__(batch_size, num_threads, device_id, seed = seed)
 
         if torch.distributed.is_initialized():
             local_rank = torch.distributed.get_rank()
@@ -235,7 +235,7 @@ def get_dali_tinyImageNet_val_loader(data_path, batch_size, seed, num_threads=4)
     
     return DALIWrapper(val_loader), ceil(pipe.epoch_size('Reader') / (world_size * batch_size))
 
-def get_dali_imageNet_train_loader(data_path, batch_size, num_threads=4, dali_cpu=False):
+def get_dali_imageNet_train_loader(data_path, batch_size, seed, num_threads=4, dali_cpu=False):
     if torch.distributed.is_initialized():
         local_rank = torch.distributed.get_rank()
         world_size = torch.distributed.get_world_size()
@@ -247,14 +247,14 @@ def get_dali_imageNet_train_loader(data_path, batch_size, num_threads=4, dali_cp
     
     pipe = ImageNetHybridTrainPipe(batch_size=batch_size, num_threads=num_threads,
                            device_id=local_rank, data_dir=train_dir,
-                           crop=224, dali_cpu=dali_cpu)
+                           crop=224, seed=seed, dali_cpu=dali_cpu)
     pipe.build()
     train_loader = DALIClassificationIterator(pipe, size=int(pipe.epoch_size('Reader') / world_size), fill_last_batch=False, last_batch_padded=True, auto_reset=True)
     
     return DALIWrapper(train_loader), ceil(pipe.epoch_size('Reader') / (world_size*batch_size))
 
 
-def get_dali_imageNet_val_loader(data_path, batch_size, num_threads=4):
+def get_dali_imageNet_val_loader(data_path, batch_size, seed, num_threads=4):
     if torch.distributed.is_initialized():
         local_rank = torch.distributed.get_rank()
         world_size = torch.distributed.get_world_size()
@@ -265,7 +265,7 @@ def get_dali_imageNet_val_loader(data_path, batch_size, num_threads=4):
     
     pipe = ImageNetHybridValPipe(batch_size=batch_size, num_threads=num_threads,
                          device_id=local_rank, data_dir=val_dir,
-                         crop=224, size=256)
+                         crop=224, size=256, seed=seed)
     pipe.build()
     val_loader = DALIClassificationIterator(pipe, size=int(pipe.epoch_size('Reader')/world_size), fill_last_batch=False, last_batch_padded=True, auto_reset=True)
     

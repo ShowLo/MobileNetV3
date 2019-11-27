@@ -320,8 +320,8 @@ if __name__ == '__main__':
     if args.dali and (args.dataset == 'tinyimagenet' or args.dataset == 'imagenet'):
         if args.dataset == 'imagenet':
             from DALIDataLoader import get_dali_imageNet_train_loader, get_dali_imageNet_val_loader
-            train_loader, train_loader_len = get_dali_imageNet_train_loader(data_path=args.data_dir, batch_size=args.batch_size, num_threads=args.num_workers)
-            val_loader, val_loader_len = get_dali_imageNet_val_loader(data_path=args.data_dir, batch_size=args.batch_size, num_threads=args.num_workers)
+            train_loader, train_loader_len = get_dali_imageNet_train_loader(data_path=args.data_dir, batch_size=args.batch_size, seed=args.seed, num_threads=args.num_workers)
+            val_loader, val_loader_len = get_dali_imageNet_val_loader(data_path=args.data_dir, batch_size=args.batch_size, seed=args.seed, num_threads=args.num_workers)
             dataloaders = {'train' : train_loader, 'val' : val_loader}
             loaders_len = {'train': train_loader_len, 'val' : val_loader_len}
         elif args.dataset == 'tinyimagenet':
@@ -372,6 +372,7 @@ if __name__ == '__main__':
             model.load_state_dict(torch.load(args.resume))
         else:
             print(("=> no checkpoint found at '{}'".format(args.resume)))
+            exit()
 
     if args.label_smoothing > 0:
         # using Label Smoothing
