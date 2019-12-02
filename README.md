@@ -78,13 +78,13 @@ mixup: using Mixup.
 
 |              | Madds     | Parameters | Top1-acc  | Top5-acc  |
 | -----------  | --------- | ---------- | --------- | --------- |
-| Ours    1.0  | 8.36 M    | 5.47 M     | -         |     -     |
+| Ours    1.0  | 66.47 M   | 4.21 M     | -         |     -     |
 
 ### on CIFAR-100
 
 |              | Madds     | Parameters | Top1-acc  | Top5-acc  |
 | -----------  | --------- | ---------- | --------- | --------- |
-| Ours    1.0  | 8.36 M    | 5.47 M     | -         |     -     |
+| Ours    1.0  | 66.58 M   | 4.32 M     | -         |     -     |
 
 ## MobileNetV3-Small
 
@@ -99,13 +99,13 @@ mixup: using Mixup.
 
 |              | Madds     | Parameters | Top1-acc  | Top5-acc  |
 | -----------  | --------- | ---------- | --------- | --------- |
-| Ours    1.0  | 3.18 M    | 2.53 M     | -         |     -     |
+| Ours    1.0  | 17.51 M   | 1.52 M     | -         |     -     |
 
 ### on CIFAR-100
 
 |              | Madds     | Parameters | Top1-acc  | Top5-acc  |
 | -----------  | --------- | ---------- | --------- | --------- |
-| Ours    1.0  | 3.18 M    | 2.53 M     | -         |     -     |
+| Ours    1.0  | 17.60 M   | 1.61 M     | -         |     -     |
 
 ## Dependency
 
