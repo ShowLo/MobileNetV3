@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from collections import OrderedDict
 
 def _ensure_divisible(number, divisor, min_value=None):
     '''
@@ -103,7 +104,9 @@ class Bottleneck(nn.Module):
                 H_swish() if use_HS else nn.ReLU(inplace=True),
                 # Linear Pointwise Convolution
                 nn.Conv2d(in_channels=exp_size, out_channels=out_channels_num, kernel_size=1, stride=1, padding=0, bias=False),
-                nn.BatchNorm2d(num_features=out_channels_num, momentum=BN_momentum)
+                #nn.BatchNorm2d(num_features=out_channels_num, momentum=BN_momentum)
+                nn.Sequential(OrderedDict([('lastBN', nn.BatchNorm2d(num_features=out_channels_num))])) if self.use_residual else
+                    nn.BatchNorm2d(num_features=out_channels_num, momentum=BN_momentum)
             )
         else:
             # With expansion
@@ -120,7 +123,9 @@ class Bottleneck(nn.Module):
                 H_swish() if use_HS else nn.ReLU(inplace=True),
                 # Linear Pointwise Convolution
                 nn.Conv2d(in_channels=exp_size, out_channels=out_channels_num, kernel_size=1, stride=1, padding=0, bias=False),
-                nn.BatchNorm2d(num_features=out_channels_num, momentum=BN_momentum)
+                #nn.BatchNorm2d(num_features=out_channels_num, momentum=BN_momentum)
+                nn.Sequential(OrderedDict([('lastBN', nn.BatchNorm2d(num_features=out_channels_num))])) if self.use_residual else
+                    nn.BatchNorm2d(num_features=out_channels_num, momentum=BN_momentum)
             )
 
     def forward(self, x):
@@ -144,8 +149,8 @@ class MobileNetV3(nn.Module):
         mode = mode.lower()
         assert mode in ['large', 'small']
         s = 2
-        if input_size == 32:
-            # using cifar-10 or cifar-100
+        if input_size == 32 or input_size == 56:
+            # using cifar-10, cifar-100 or Tiny-ImageNet
             s = 1
 
         # setting of the model
