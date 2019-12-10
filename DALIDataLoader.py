@@ -35,7 +35,8 @@ class TinyImageNetHybridTrainPipe(Pipeline):
                 shard_id=local_rank,
                 num_shards=world_size,
                 pad_last_batch=True,
-                random_shuffle=True)
+                random_shuffle=False,
+                shuffle_after_epoch=True)
         
         # decide to work on cpu or gpu
         dali_device = 'cpu' if dali_cpu else 'gpu'
@@ -117,7 +118,8 @@ class ImageNetHybridTrainPipe(Pipeline):
                 shard_id=local_rank,
                 num_shards=world_size,
                 pad_last_batch=True,
-                random_shuffle=True)
+                random_shuffle=False,
+                shuffle_after_epoch=True)
         
         # decide to work on cpu or gpu
         dali_device = 'cpu' if dali_cpu else 'gpu'

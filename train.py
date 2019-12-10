@@ -20,19 +20,19 @@ from math import cos, pi
 from statistics import *
 from EMA import EMA
 from LabelSmoothing import LabelSmoothingLoss
-from DataLoader import dataloaders
+# from DataLoader import dataloaders
 from ResultWriter import ResultWriter
-from CosineWarmupLR import CosineWarmupLR
+from CosineLR import *
 from Mixup import mixup_data, mixup_criterion
 
-def train(args, model, dataloader, criterion, optimizer, scheduler, use_gpu, epoch, ema=None, save_file_name='train.csv'):
+def train(args, model, dataloader, loader_len, criterion, optimizer, scheduler, use_gpu, epoch, ema=None, save_file_name='train.csv'):
     '''
     train the model
     '''
     # save result every epoch
     resultWriter = ResultWriter(args.save_path, save_file_name)
     if epoch == 0:
-        resultWriter.create_csv(['epoch', 'loss', 'top-1', 'top-5'])
+        resultWriter.create_csv(['epoch', 'loss', 'top-1', 'top-5', 'lr'])
 
     # use gpu or not
     device = torch.device('cuda' if use_gpu else 'cpu')
@@ -44,7 +44,7 @@ def train(args, model, dataloader, criterion, optimizer, scheduler, use_gpu, epo
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
     progress = ProgressMeter(
-        len(dataloader),
+        loader_len,
         [batch_time, data_time, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch))
     
@@ -81,7 +81,7 @@ def train(args, model, dataloader, criterion, optimizer, scheduler, use_gpu, epo
             loss = criterion(outputs, labels)
             # measure accuracy and record loss
             acc1, acc5 = accuracy(outputs, labels, topk=(1, 5))
-
+        
         # zero the parameter gradients
         optimizer.zero_grad()
 
@@ -93,7 +93,10 @@ def train(args, model, dataloader, criterion, optimizer, scheduler, use_gpu, epo
         loss.backward()
         if args.lr_decay == 'cos':
             # update lr here if using cosine lr decay
-            scheduler.step(epoch * len(dataloader) + i)
+            scheduler.step(epoch * loader_len + i)
+        elif args.lr_decay == 'sgdr':
+            # update lr here if using sgdr
+            scheduler.step(epoch + i / loader_len)
         optimizer.step()
         if args.ema_decay > 0:
             # EMA update after training(every iteration)
@@ -106,8 +109,8 @@ def train(args, model, dataloader, criterion, optimizer, scheduler, use_gpu, epo
             progress.display(i)
             
     # write training result to file
-    resultWriter.write_csv([epoch, losses.avg, top1.avg.item(), top5.avg.item()])
-            
+    resultWriter.write_csv([epoch, losses.avg, top1.avg.item(), top5.avg.item(), scheduler.optimizer.param_groups[0]['lr']])
+    
     print()
     # there is a bug in get_lr() if using pytorch 1.1.0, see https://github.com/pytorch/pytorch/issues/22107
     # so here we don't use get_lr()
@@ -120,7 +123,7 @@ def train(args, model, dataloader, criterion, optimizer, scheduler, use_gpu, epo
             os.makedirs(args.save_path)
         torch.save(model.state_dict(), os.path.join(args.save_path, "epoch_" + str(epoch) + ".pth"))
 
-def validate(args, model, dataloader, criterion, use_gpu, epoch, ema=None, save_file_name='val.csv'):
+def validate(args, model, dataloader, loader_len, criterion, use_gpu, epoch, ema=None, save_file_name='val.csv'):
     '''
     validate the model
     '''
@@ -138,7 +141,7 @@ def validate(args, model, dataloader, criterion, use_gpu, epoch, ema=None, save_
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
     progress = ProgressMeter(
-        len(dataloader),
+        loader_len,
         [batch_time, data_time, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch))
     if args.ema_decay > 0:
@@ -177,8 +180,7 @@ def validate(args, model, dataloader, criterion, use_gpu, epoch, ema=None, save_
     # write val result to file
     resultWriter.write_csv([epoch, losses.avg, top1.avg.item(), top5.avg.item()])
 
-    print(' Val  ***    Loss:{losses.avg:.2e}    Acc@1:{top1.avg:.2f}    Acc@5:{top5.avg:.2f}'.format(losses=losses, top1=top1, top5=top5))     
-    print()
+    print(' Val  ***    Loss:{losses.avg:.2e}    Acc@1:{top1.avg:.2f}    Acc@5:{top5.avg:.2f}'.format(losses=losses, top1=top1, top5=top5))
 
     if epoch % args.save_epoch_freq == 0 and epoch != 0:
         if not os.path.exists(args.save_path):
@@ -190,7 +192,7 @@ def validate(args, model, dataloader, criterion, use_gpu, epoch, ema=None, save_
     
     return top1_acc, top5_acc
 
-def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gpu):
+def train_model(args, model, dataloader, loaders_len, criterion, optimizer, scheduler, use_gpu):
     '''
     train the model
     '''
@@ -207,10 +209,10 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
     correspond_top5 = 0.0
 
     for epoch in range(args.start_epoch, args.num_epochs):
-        
+
         epoch_time = time.time()
-        train(args, model, dataloader['train'], criterion, optimizer, scheduler, use_gpu, epoch, ema)
-        top1_acc, top5_acc = validate(args, model, dataloader['val'], criterion, use_gpu, epoch, ema)
+        train(args, model, dataloader['train'], loaders_len['train'], criterion, optimizer, scheduler, use_gpu, epoch, ema)
+        top1_acc, top5_acc = validate(args, model, dataloader['val'], loaders_len['val'], criterion, use_gpu, epoch, ema)
         epoch_time = time.time() - epoch_time
         print('Time of epoch-[{:d}/{:d}] : {:.0f}h {:.0f}m {:.0f}s\n'.format(epoch, args.num_epochs, epoch_time // 3600, (epoch_time % 3600) // 60, epoch_time % 60))
 
@@ -224,7 +226,7 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
             if args.ema_decay > 0:
                 ema.restore()
 
-    print(args.save_path)
+    print(os.path.split(args.save_path)[-1])
     print('Best val top-1 Accuracy: {:4f}'.format(best_acc))
     print('Corresponding top-5 Accuracy: {:4f}'.format(correspond_top5))
     
@@ -234,10 +236,14 @@ def train_model(args, model, dataloader, criterion, optimizer, scheduler, use_gp
     # load best model weights
     model.load_state_dict(best_model_wts)
     # save best model weights
-    torch.save(model.state_dict(), os.path.join(args.save_path, 'best_model_wts-' + '{:.2f}'.format(best_acc) + '.pth'))
+    if args.save:
+        torch.save(model.state_dict(), os.path.join(args.save_path, 'best_model_wts-' + '{:.2f}'.format(best_acc) + '.pth'))
     return model
 
 if __name__ == '__main__':
+
+    import warnings
+    warnings.filterwarnings('ignore')
 
     parser = argparse.ArgumentParser(description='PyTorch implementation of MobileNetV3')
     # Root catalog of images
@@ -250,6 +256,7 @@ if __name__ == '__main__':
     parser.add_argument('--print-freq', type=int, default=1000)
     parser.add_argument('--save-epoch-freq', type=int, default=1)
     parser.add_argument('--save-path', type=str, default='/media/data2/chenjiarong/saved-model/MobileNetV3')
+    parser.add_argument('-save', default=False, action='store_true', help='save model or not')
     parser.add_argument('--resume', type=str, default='', help='For training from one checkpoint')
     parser.add_argument('--start-epoch', type=int, default=0, help='Corresponding to the epoch of resume')
     parser.add_argument('--ema-decay', type=float, default=0.9999, help='The decay of exponential moving average ')
@@ -260,11 +267,14 @@ if __name__ == '__main__':
     parser.add_argument('--width-multiplier', type=float, default=1.0, help='width multiplier')
     parser.add_argument('--dropout', type=float, default=0.2, help='dropout rate')
     parser.add_argument('--label-smoothing', type=float, default=0.1, help='label smoothing')
-    parser.add_argument('--lr-decay', type=str, default='step', help='learning rate decay method, step or cos')
+    parser.add_argument('--lr-decay', type=str, default='step', help='learning rate decay method, step, cos or sgdr')
     parser.add_argument('--step-size', type=int, default=3, help='step size in stepLR()')
     parser.add_argument('--gamma', type=float, default=0.99, help='gamma in stepLR()')
     parser.add_argument('--lr-min', type=float, default=0, help='minium lr using in CosineWarmupLR')
     parser.add_argument('--warmup-epochs', type=int, default=0, help='warmup epochs using in CosineWarmupLR')
+    parser.add_argument('--T-0', type=int, default=10, help='T_0 in CosineAnnealingWarmRestarts')
+    parser.add_argument('--T-mult', type=int, default=2, help='T_mult in CosineAnnealingWarmRestarts')
+    parser.add_argument('--decay-rate', type=float, default=1, help='decay rate in CosineAnnealingWarmRestarts')
     parser.add_argument('--optimizer', type=str, default='sgd', help='optimizer')
     parser.add_argument('--weight-decay', type=float, default=1e-5, help='weight decay')
     parser.add_argument('--bn-momentum', type=float, default=0.1, help='momentum in BatchNorm2d')
@@ -287,11 +297,13 @@ if __name__ == '__main__':
         folder_name.append(args.lr_decay+str(args.step_size)+'&'+str(args.gamma))
     elif args.lr_decay == 'cos':
         folder_name.append(args.lr_decay+str(args.warmup_epochs) + '&' + str(args.lr_min))
+    elif args.lr_decay == 'sgdr':
+        folder_name.append(args.lr_decay+str(args.T_0)+'&'+str(args.T_mult)+'&'+str(args.warmup_epochs)+'&'+str(args.decay_rate))
     folder_name = '-'.join(folder_name)
     args.save_path = os.path.join(args.save_path, folder_name)
     if not os.path.exists(args.save_path):
         os.makedirs(args.save_path)
-        
+
     # use gpu or not
     use_gpu = torch.cuda.is_available()
     print("use_gpu:{}".format(use_gpu))
@@ -353,11 +365,11 @@ if __name__ == '__main__':
     elif args.dataset == 'cifar10' or args.dataset == 'svhn':
         input_size = 32
         num_class = 10
-
+    
     # get model
     model = MobileNetV3(mode=args.mode, classes_num=num_class, input_size=input_size, 
-                        width_multiplier=args.width_multiplier, dropout=args.dropout, 
-                        BN_momentum=args.bn_momentum, zero_gamma=args.zero_gamma)
+                    width_multiplier=args.width_multiplier, dropout=args.dropout, 
+                    BN_momentum=args.bn_momentum, zero_gamma=args.zero_gamma)
 
     if use_gpu:
         if torch.cuda.device_count() > 1:
@@ -391,16 +403,21 @@ if __name__ == '__main__':
             optimizer_ft = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
     elif args.optimizer == 'rmsprop':
         optimizer_ft = optim.RMSprop(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+    elif args.optimizer == 'adam':
+        optimizer_ft = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     if args.lr_decay == 'step':
         # Decay LR by a factor of 0.99 every 3 epoch
         lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=args.step_size, gamma=args.gamma)
     elif args.lr_decay == 'cos':
-        lr_scheduler = CosineWarmupLR(optimizer=optimizer_ft, epochs=args.num_epochs, iter_in_one_epoch=len(dataloaders['train']), lr_min=args.lr_min, warmup_epochs=args.warmup_epochs)
+        lr_scheduler = CosineWarmupLR(optimizer=optimizer_ft, epochs=args.num_epochs, iter_in_one_epoch=loaders_len['train'], lr_min=args.lr_min, warmup_epochs=args.warmup_epochs)
+    elif args.lr_decay == 'sgdr':
+        lr_scheduler = CosineAnnealingWarmRestarts(optimizer=optimizer_ft, T_0=args.T_0, T_mult=args.T_mult, warmup_epochs=args.warmup_epochs, decay_rate=args.decay_rate)
 
     model = train_model(args=args,
                         model=model,
                         dataloader=dataloaders,
+                        loaders_len=loaders_len,
                         criterion=criterion,
                         optimizer=optimizer_ft,
                         scheduler=lr_scheduler,
