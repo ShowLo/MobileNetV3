@@ -42,17 +42,9 @@ class TinyImageNetHybridTrainPipe(Pipeline):
         dali_device = 'cpu' if dali_cpu else 'gpu'
         decoder_device = 'cpu' if dali_cpu else 'mixed'
 
-        # This padding sets the size of the internal nvJPEG buffers to be able to handle all images from full-sized ImageNet
-        # without additional reallocations
-        device_memory_padding = 211025920 if decoder_device == 'mixed' else 0
-        host_memory_padding = 140544512 if decoder_device == 'mixed' else 0
-        self.decode = ops.ImageDecoderRandomCrop(device=decoder_device, output_type=types.RGB,
-                                                 device_memory_padding=device_memory_padding,
-                                                 host_memory_padding=host_memory_padding,
-                                                 random_aspect_ratio=[0.75, 1.25],
-                                                 random_area=[0.08, 1.0],
-                                                 num_attempts=100)
-        self.res = ops.Resize(device=dali_device, resize_x=crop, resize_y=crop, interp_type=types.INTERP_TRIANGULAR)
+        self.decode = ops.ImageDecoder(device=decoder_device, output_type=types.RGB)
+        self.res = ops.RandomResizedCrop(device=dali_device, size=crop, random_aspect_ratio=[0.75, 4./3],
+                                         random_area=[0.08, 1.0], num_attempts=100, interp_type=types.INTERP_TRIANGULAR)
         self.cmnp = ops.CropMirrorNormalize(device='gpu',
                                             output_dtype=types.FLOAT,
                                             output_layout=types.NCHW,
@@ -129,6 +121,7 @@ class ImageNetHybridTrainPipe(Pipeline):
         # without additional reallocations
         device_memory_padding = 211025920 if decoder_device == 'mixed' else 0
         host_memory_padding = 140544512 if decoder_device == 'mixed' else 0
+        '''
         self.decode = ops.ImageDecoderRandomCrop(device=decoder_device, output_type=types.RGB,
                                                  device_memory_padding=device_memory_padding,
                                                  host_memory_padding=host_memory_padding,
@@ -136,6 +129,12 @@ class ImageNetHybridTrainPipe(Pipeline):
                                                  random_area=[0.08, 1.0],
                                                  num_attempts=100)
         self.res = ops.Resize(device=dali_device, resize_x=crop, resize_y=crop, interp_type=types.INTERP_TRIANGULAR)
+        '''
+        self.decode = ops.ImageDecoder(device=decoder_device, output_type=types.RGB,
+                                       device_memory_padding=device_memory_padding,
+                                       host_memory_padding=host_memory_padding,)
+        self.res = ops.RandomResizedCrop(device=dali_device, size=crop, random_aspect_ratio=[0.75, 4./3],
+                                         random_area=[0.08, 1.0], num_attempts=100, interp_type=types.INTERP_TRIANGULAR)
         self.cmnp = ops.CropMirrorNormalize(device='gpu',
                                             output_dtype=types.FLOAT,
                                             output_layout=types.NCHW,
