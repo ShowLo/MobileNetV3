@@ -55,15 +55,52 @@ mixup: using Mixup.
 
 ### on CIFAR-10
 
-1. number of epochs: 150 for MobileNetV3-Small and 200 for MobileNetV3-Large
-2. learning rate schedule: cosine, minium lr of 1e-5, initial lr=0.7
-3. weight decay: 4e-5
-4. batch size: 256
-5. optimizer: SGD with momentum=0.9
+```
+CUDA_VISIBLE_DEVICES=1 python train.py --batch-size=128 --mode=small --print-freq=100 --dataset=CIFAR10\
+  --ema-decay=0 --label-smoothing=0 --lr=0.35 --save-epoch-freq=1000 --lr-decay=cos --lr-min=0\
+  --warmup-epochs=5 --weight-decay=6e-5 --num-epochs=400 --num-workers=2 --width-multiplier=1
+```
 
 ### on CIFAR-100
 
-&emsp;TO DO.
+```
+CUDA_VISIBLE_DEVICES=1 python train.py --batch-size=128 --mode=small --print-freq=100 --dataset=CIFAR100\
+  --ema-decay=0 --label-smoothing=0 --lr=0.35 --save-epoch-freq=1000 --lr-decay=cos --lr-min=0\
+  --warmup-epochs=5 --weight-decay=6e-5 --num-epochs=400 --num-workers=2 --width-multiplier=1
+```
+
+&emsp;Using more tricks：
+```
+CUDA_VISIBLE_DEVICES=1 python train.py --batch-size=128 --mode=small --print-freq=100 --dataset=CIFAR100\
+  --ema-decay=0.999 --label-smoothing=0.1 --lr=0.35 --save-epoch-freq=1000 --lr-decay=cos --lr-min=0\
+  --warmup-epochs=5 --weight-decay=6e-5 --num-epochs=400 --num-workers=2 --width-multiplier=1\
+  -zero-gamma -nbd -mixup
+```
+
+### on SVHN
+
+```
+CUDA_VISIBLE_DEVICES=3 python train.py --batch-size=128 --mode=small --print-freq=1000 --dataset=SVHN\
+  --ema-decay=0 --label-smoothing=0 --lr=0.35 --save-epoch-freq=1000 --lr-decay=cos --lr-min=0\
+  --warmup-epochs=5 --weight-decay=6e-5 --num-epochs=20 --num-workers=2 --width-multiplier=1
+```
+
+### on Tiny-ImageNet
+
+```
+CUDA_VISIBLE_DEVICES=7 python train.py --batch-size=128 --mode=small --print-freq=100 --dataset=tinyimagenet\
+  --data-dir=/media/data2/chenjiarong/ImageData/tiny-imagenet --ema-decay=0 --label-smoothing=0 --lr=0.15\
+  --save-epoch-freq=1000 --lr-decay=cos --lr-min=0 --warmup-epochs=5 --weight-decay=6e-5 --num-epochs=200\
+  --num-workers=2 --width-multiplier=1 -dali
+```
+
+&emsp;Using more tricks：
+```
+CUDA_VISIBLE_DEVICES=7 python train.py --batch-size=128 --mode=small --print-freq=100 --dataset=tinyimagenet\
+  --data-dir=/media/data2/chenjiarong/ImageData/tiny-imagenet --ema-decay=0.999 --label-smoothing=0.1 --lr=0.15\
+  --save-epoch-freq=1000 --lr-decay=cos --lr-min=0 --warmup-epochs=5 --weight-decay=6e-5 --num-epochs=200\
+  --num-workers=2 --width-multiplier=1 -dali -nbd -mixup
+```
 
 ## MobileNetV3-Large
 
@@ -95,17 +132,31 @@ mixup: using Mixup.
 | Offical 1.0  | 66 M      | 2.9  M     | 67.4%     |     -     |
 | Ours    1.0  | 56.51 M   | 2.53 M     | -         |     -     |
 
-### on CIFAR-10
+### on CIFAR-10 (Average accuracy of 5 runs)
 
 |              | Madds     | Parameters | Top1-acc  | Top5-acc  |
 | -----------  | --------- | ---------- | --------- | --------- |
-| Ours    1.0  | 17.51 M   | 1.52 M     | -         |     -     |
+| Ours    1.0  |  17.51 M  |   1.52 M   |   92.97%  |     -     |
 
-### on CIFAR-100
+### on CIFAR-100 (Average accuracy of 5 runs)
 
 |              | Madds     | Parameters | Top1-acc  | Top5-acc  |
 | -----------  | --------- | ---------- | --------- | --------- |
-| Ours    1.0  | 17.60 M   | 1.61 M     | -         |     -     |
+| Ours    1.0  |  17.60 M  |   1.61 M   |  73.69%   |  92.31%   |
+| More Tricks  |   same    |    same    |  76.24%   |  92.58%   |
+
+### on SVHN (Average accuracy of 5 runs)
+
+|              | Madds     | Parameters | Top1-acc  | Top5-acc  |
+| -----------  | --------- | ---------- | --------- | --------- |
+| Ours    1.0  |  17.51 M  |   1.52 M   |   97.92%  |     -     |
+
+### on Tiny-ImageNet (Average accuracy of 5 runs)
+
+|              | Madds     | Parameters | Top1-acc  | Top5-acc  |
+| -----------  | --------- | ---------- | --------- | --------- |
+| Ours    1.0  |  51.63 M  |   1.71 M   |  59.32%   |  81.38%   |
+| More Tricks  |   same    |    same    |  62.62%   |  84.04%   |
 
 ## Dependency
 
