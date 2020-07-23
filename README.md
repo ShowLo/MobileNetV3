@@ -108,7 +108,7 @@ CUDA_VISIBLE_DEVICES=7 python train.py --batch-size=128 --mode=small --print-fre
 
 |              | Madds     | Parameters | Top1-acc  | Top5-acc  |
 | -----------  | --------- | ---------- | --------- | --------- |
-| Offical 1.0  | 219 M     | 5.4  M     | 72.0%     |     -     |
+| Offical 1.0  | 219 M     | 5.4  M     | 75.2%     |     -     |
 | Ours    1.0  | 216.6 M   | 5.47 M     | -         |     -     |
 
 ### on CIFAR-10
@@ -129,7 +129,7 @@ CUDA_VISIBLE_DEVICES=7 python train.py --batch-size=128 --mode=small --print-fre
 
 |              | Madds     | Parameters | Top1-acc  | Top5-acc  |
 | -----------  | --------- | ---------- | --------- | --------- |
-| Offical 1.0  | 66 M      | 2.9  M     | 67.4%     |     -     |
+| Offical 1.0  | 56.5 M    | 2.53 M     | 67.4%     |     -     |
 | Ours    1.0  | 56.51 M   | 2.53 M     | -         |     -     |
 
 ### on CIFAR-10 (Average accuracy of 5 runs)
