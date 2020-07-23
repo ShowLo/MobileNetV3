@@ -51,7 +51,11 @@ mixup: using Mixup.
 
 ### on ImageNet
 
-&emsp;TO DO.
+```
+CUDA_VISIBLE_DEVICES=5 python train.py --batch-size=128 --mode=small --print-freq=2000 --dataset=imagenet \
+--ema-decay=0.99 --label-smoothing=0.1 --lr=0.1 --save-epoch-freq=50 --lr-decay=cos --lr-min=0 --warmup-epochs=5 \
+--weight-decay=1e-5 --num-epochs=250 --num-workers=2 --width-multiplier=1 -dali -nbd -mixup -zero-gamma -save
+```
 
 ### on CIFAR-10
 
