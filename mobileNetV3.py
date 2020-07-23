@@ -25,7 +25,7 @@ def _ensure_divisible(number, divisor, min_value=None):
     if new_num < 0.9 * number:
         new_num += divisor
     return new_num
-
+    
 class H_sigmoid(nn.Module):
     '''
     hard sigmoid
@@ -95,13 +95,14 @@ class Bottleneck(nn.Module):
 
         if exp_size == in_channels_num:
             # Without expansion, the first depthwise convolution is omitted
-            self.conv = nn.Sequential(
+            self.conv1 = nn.Sequential(
                 # Depthwise Convolution
                 nn.Conv2d(in_channels=in_channels_num, out_channels=exp_size, kernel_size=kernel_size, stride=stride, padding=(kernel_size-1)//2, groups=in_channels_num, bias=False),
                 nn.BatchNorm2d(num_features=exp_size, momentum=BN_momentum),
                 # SE Module
                 SEModule(exp_size) if use_SE else nn.Sequential(),
-                H_swish() if use_HS else nn.ReLU(inplace=True),
+                H_swish() if use_HS else nn.ReLU(inplace=True))
+            self.conv2 = nn.Sequential(
                 # Linear Pointwise Convolution
                 nn.Conv2d(in_channels=exp_size, out_channels=out_channels_num, kernel_size=1, stride=1, padding=0, bias=False),
                 #nn.BatchNorm2d(num_features=out_channels_num, momentum=BN_momentum)
@@ -110,11 +111,12 @@ class Bottleneck(nn.Module):
             )
         else:
             # With expansion
-            self.conv = nn.Sequential(
+            self.conv1 = nn.Sequential(
                 # Pointwise Convolution for expansion
                 nn.Conv2d(in_channels=in_channels_num, out_channels=exp_size, kernel_size=1, stride=1, padding=0, bias=False),
                 nn.BatchNorm2d(num_features=exp_size, momentum=BN_momentum),
-                H_swish() if use_HS else nn.ReLU(inplace=True),
+                H_swish() if use_HS else nn.ReLU(inplace=True))
+            self.conv2 = nn.Sequential(
                 # Depthwise Convolution
                 nn.Conv2d(in_channels=exp_size, out_channels=exp_size, kernel_size=kernel_size, stride=stride, padding=(kernel_size-1)//2, groups=exp_size, bias=False),
                 nn.BatchNorm2d(num_features=exp_size, momentum=BN_momentum),
@@ -128,18 +130,21 @@ class Bottleneck(nn.Module):
                     nn.BatchNorm2d(num_features=out_channels_num, momentum=BN_momentum)
             )
 
-    def forward(self, x):
+    def forward(self, x, expand=False):
+        out1 = self.conv1(x)
+        out = self.conv2(out1)
         if self.use_residual:
-            return self.conv(x) + x
+            out = out + x
+        if expand:
+            return out, out1
         else:
-            return self.conv(x)
-
+            return out
 
 class MobileNetV3(nn.Module):
     '''
     
     '''
-    def __init__(self, mode='large', classes_num=1000, input_size=224, width_multiplier=1.0, dropout=0.2, BN_momentum=0.1, zero_gamma=False):
+    def __init__(self, mode='small', classes_num=1000, input_size=224, width_multiplier=1.0, dropout=0.2, BN_momentum=0.1, zero_gamma=False):
         '''
         configs: setting of the model
         mode: type of the model, 'large' or 'small'
@@ -228,29 +233,50 @@ class MobileNetV3(nn.Module):
             )
         feature_extraction_layers.append(last_stage_layer1)
 
+        
+        self.featureList = nn.ModuleList(feature_extraction_layers)
+
         # SE Module
         # remove the last SE Module according to https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet_v3.py
         # feature_extraction_layers.append(SEModule(last_stage_channels_num) if mode == 'small' else nn.Sequential())
 
-        feature_extraction_layers.append(nn.AdaptiveAvgPool2d(1))
-        feature_extraction_layers.append(nn.Conv2d(in_channels=last_stage_channels_num, out_channels=last_channels_num, kernel_size=1, stride=1, padding=0, bias=False))
-        feature_extraction_layers.append(H_swish())
+        last_stage = []
+        last_stage.append(nn.AdaptiveAvgPool2d(1))
+        last_stage.append(nn.Conv2d(in_channels=last_stage_channels_num, out_channels=last_channels_num, kernel_size=1, stride=1, padding=0, bias=False))
+        last_stage.append(H_swish())
 
-        self.features = nn.Sequential(*feature_extraction_layers)
+        self.last_stage_layers = nn.Sequential(*last_stage)
+        
 
         ########################################################################################################################
         # Classification part
+        
         self.classifier = nn.Sequential(
             nn.Dropout(p=dropout),
             nn.Linear(last_channels_num, classes_num)
         )
+        
+
+        '''
+        self.extras = nn.ModuleList([
+            InvertedResidual(576, 512, 2, 0.2),
+            InvertedResidual(512, 256, 2, 0.25),
+            InvertedResidual(256, 256, 2, 0.5),
+            InvertedResidual(256, 64, 2, 0.25)
+        ])
+        '''
 
         ########################################################################################################################
         # Initialize the weights
         self._initialize_weights(zero_gamma)
 
     def forward(self, x):
-        x = self.features(x)
+        for i in range(9):
+            x = self.featureList[i](x)
+        x = self.featureList[9](x)
+        for i in range(10, len(self.featureList)):
+            x = self.featureList[i](x)
+        x = self.last_stage_layers(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
         return x
@@ -277,33 +303,18 @@ class MobileNetV3(nn.Module):
 	                nn.init.constant_(m.lastBN.weight, 0.0)
 
 if __name__ == "__main__":
-    width_multiplier = 0.2
+    width_multiplier = 1
     from torchsummaryX import summary
     
     # cifar10
     #model_large = MobileNetV3(mode='large', classes_num=10, input_size=32, width_multiplier=width_multiplier)
     #model_large.eval()
+    '''
     model_small = MobileNetV3(mode='small', classes_num=10, input_size=32, width_multiplier=width_multiplier)
     model_small.eval()
-    '''
-    input = torch.randn(1, 3, 32, 32)
-    from thop import profile
-    FLOPs_large, params_large = profile(model_large, inputs=(input,))
-    FLOPs_small, params_small = profile(model_small, inputs=(input,))
-
-    print('\nOn cifar10 using thop')
-    print('MobileNetV3-Large-%.2f:' % width_multiplier)
-    print('Total flops: %.4fM' % (FLOPs_large/1000000.0))
-    print('Total params: %.4fM' % (params_large/1000000.0))
-    print()
-    print('MobileNetV3-Small-%.2f:' % width_multiplier)
-    print('Total flops: %.4fM' % (FLOPs_small/1000000.0))
-    print('Total params: %.4fM' % (params_small/1000000.0))
-    
-    summary(model_large, torch.zeros((1, 3, 32, 32)))
-    print('MobileNetV3-Large-%.2f cifar10-summaryX\n' % width_multiplier)'''
     summary(model_small, torch.zeros((1, 3, 32, 32)))
     print('MobileNetV3-Small-%.2f cifar10-summaryX\n' % width_multiplier)
+    '''
     '''
     # cifar100
     model_large = MobileNetV3(mode='large', classes_num=100, input_size=32, width_multiplier=width_multiplier)
