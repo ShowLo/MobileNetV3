@@ -130,7 +130,9 @@ CUDA_VISIBLE_DEVICES=7 python train.py --batch-size=128 --mode=small --print-fre
 |              | Madds     | Parameters | Top1-acc  | Top5-acc  |
 | -----------  | --------- | ---------- | --------- | --------- |
 | Offical 1.0  | 56.5 M    | 2.53 M     | 67.4%     |     -     |
-| Ours    1.0  | 56.51 M   | 2.53 M     | -         |     -     |
+| Ours    1.0  | 56.51 M   | 2.53 M     | 67.52%    | 87.58%    |
+
+&emsp;The pretrained model with top-1 accuracy 67.54% is provided in the folder [pretrained](https://github.com/ShowLo/MobileNetV3/tree/master/pretrained).
 
 ### on CIFAR-10 (Average accuracy of 5 runs)
 
