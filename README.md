@@ -43,7 +43,7 @@ mixup: using Mixup.
 
 # Pretrained models
 
-&emsp;TO DO.
+&emsp;We have provided the pretrained MobileNetV3-Small model in `pretrained`.
 
 # Experiments
 
